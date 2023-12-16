@@ -325,12 +325,40 @@ void LAPSE(const string & name) {
     for (auto i : mp)  listX.emplace_back(i);
     sort(listX.begin(), listX.end(), cmp_1);
     cout << "AFTER ACCUMULATE AND SORT\n";
-    cout << "LIST X IS\n";
+    cout << "LIST X IS: \n";
     for (auto i : listX) {
         cout << "Char: " << i.first << endl;
         cout << "Fre: " << i.second.freq << endl;
     }
-
+    cout << "BREAK\n";
+    auto tree = make_unique<HuffTree>();
+    vector<unique_ptr<HuffTree>> ls;
+    for (int i = 0; i < listX.size(); i++) {
+        auto temp = make_unique<HuffTree>(make_unique<HuffNode>(listX[i].second.freq, listX[i].first));
+        ls.push_back(std::move(temp));
+    }
+    sort(ls.begin(), ls.end(), cmp);
+    for (int i = 0; i < 4; i++ ) cout << "List" << i << " node: " << ls[i]->get_c() << " freq: " << ls[i]->get_freq() << endl;
+    while (ls.size() > 1) {
+        cout << "InLOOP\n";
+        auto tmp1 = std::move(ls.front());
+        ls.erase(ls.begin());
+        auto tmp2 = std::move(ls.front());
+        ls.erase(ls.begin());
+        auto tmp3 = make_unique<HuffNode>(tmp1->get_freq() + tmp2->get_freq(), '\0', tmp1->get_root(), tmp2->get_root());
+        auto temp_tree = make_unique<HuffTree>(std::move(tmp3));
+        temp_tree->get_unbalance();
+        temp_tree->get_unbalance();
+        temp_tree->get_unbalance();
+        ls.insert(ls.begin(), std::move(temp_tree));
+        sort(ls.begin(), ls.end(), cmp);
+        tree = std::move(ls[0]);
+        // the first node of tree is a tree (rotated)
+        cout << "PreOrder\n";
+        tree->preorderTraversal([](char c, int freq, int height) {
+        cout << "Node: " << c << " with frequency: " << freq  << " and height: " << height << endl;}
+        );
+    }
     cout << "End LAPSE\n";
 }
 // ==================END LAPSE CODE==================
