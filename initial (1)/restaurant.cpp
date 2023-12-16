@@ -1,4 +1,5 @@
 #include "main.h"
+#include <memory>
 int MAXSIZE;
 
 struct Data {
@@ -6,146 +7,194 @@ struct Data {
     int timestamp = 0;
 };
 /** Huffman tree node implement */
+static long long count_rotate = 0;
 class HuffNode {
-public:
-    friend class HuffTree;
-    virtual bool isLeaf() = 0;
-    virtual int get_weight() = 0; 
-    virtual ~HuffNode() = default;
-};
-// as
-/** Huffman tree node: Leaf class */
-class HuffLeafNode : public HuffNode{
 private:
     char c;
-    int weight;
-    friend class HuffTree;
+    int freq;
+    unique_ptr<HuffNode> left;
+    unique_ptr<HuffNode> right;
 public:
-    /** Constructor */
-    HuffLeafNode(char c, int wt) : c(c), weight(wt) {}
-    char get_c() const { return c; }
-    int get_weight() override { return weight; }
-    bool isLeaf() override { return true; }
-    ~HuffLeafNode() override = default;
-};
-
-/** Huffman tree node: Internal class */
-class HuffInternalNode : public HuffNode {
-private: 
-    int weight; 
-    HuffNode* left;
-    HuffNode* right;
     friend class HuffTree;
-public:
-    HuffInternalNode(HuffNode* l, HuffNode* r, int wt) : left(l), right(r), weight(wt) {}
-    int get_weight() override { return weight; }
-    bool isLeaf() override { return false; }
-    ~HuffInternalNode() override {
-        delete left;
-        delete right;
+    // DEFAULT CONSTRUCTOR
+    HuffNode() : freq(0), c('\0'), left(nullptr), right(nullptr) {}
+    // CONSTRUCTOR WITH PARAMETERS
+    HuffNode(int frequency, char character,
+            std::unique_ptr<HuffNode> leftChild = nullptr,
+            std::unique_ptr<HuffNode> rightChild = nullptr)
+        : freq(frequency), c(character), left(std::move(leftChild)), right(std::move(rightChild)) {}
+    HuffNode(char character, int frequency,
+             unique_ptr<HuffNode> leftChild,
+             unique_ptr<HuffNode> rightChild)
+            : c(character), freq(frequency),
+              left(std::move(leftChild)), right(std::move(rightChild)) {}
+    int get_height(const unique_ptr<HuffNode>& root) {
+        if (!root) return 0;
+        if (!root->left && !root->right) return 1;
+        int hleft = get_height(root->left);
+        int hright = get_height(root->right);
+        return 1+ max(hleft, hright);
     }
+    int get_freq() { return freq;}
+    char get_c() { return c;}
 };
-
-/** Huffman coding tree */
 class HuffTree {
 private:
-    HuffNode* root; 
-    int get_height_rec(HuffNode* node) {
-        if (node->isLeaf()) return 1; 
-        else if (auto* internalNode = dynamic_cast<HuffInternalNode*>(node)) {
-            int height_left = get_height_rec(internalNode->left);
-            int height_right = get_height_rec(internalNode->right);
-            return std::max(height_left, height_right) + 1;
-        }
-        else throw out_of_range("Invalid node type");
+    unique_ptr<HuffNode> root;
+    int get_height(const unique_ptr<HuffNode>& root) {
+        if (!root) return 0;
+        if (!root->left && !root->right) return 1;
+        int hleft = get_height(root->left);
+        int hright = get_height(root->right);
+        return 1+ max(hleft, hright);
     }
-    HuffNode* rotateLeft(HuffNode* nodeRoot) {
-        if (nodeRoot == nullptr || nodeRoot->isLeaf()) {
-            // Basic case or node is a leaf
-            return nodeRoot;
-        }
-        // Cast the node to an internal node
-        HuffInternalNode* rootInternal = dynamic_cast<HuffInternalNode*>(nodeRoot);
-        if (!rootInternal->right) {
-            // If the right child is null, rotation is not possible
-            return nodeRoot;
-        }
-        // Perform the rotation
-        HuffInternalNode* newRoot = dynamic_cast<HuffInternalNode*>(rootInternal->right);
-        rootInternal->right = newRoot->left;
-        newRoot->left = rootInternal;
 
+    unique_ptr<HuffNode> rotateLeft(unique_ptr<HuffNode> root) {
+        if (!root || !root->right) {
+            // Rotation is not possible if root or root's right child is null
+            cout << "MISTAKE RotaLeft";
+            return root;
+        }
+        unique_ptr<HuffNode> newRoot = std::move(root->right);
+        // Reattach the left child of the new root to the right of the original root
+        root->right = std::move(newRoot->left);
+        // Now, make the original root the left child of the new root
+        newRoot->left = std::move(root);
+        // Return the new root
         return newRoot;
     }
-    HuffNode* rotateRight(HuffNode* nodeRoot) {
-        if (nodeRoot == nullptr || nodeRoot->isLeaf()) {
-            // Basic case or node is a leaf
-            return nodeRoot;
+    unique_ptr<HuffNode> rotateRight(unique_ptr<HuffNode> root) {
+        if (!root || !root->left) {
+            // Rotation is not possible if root or root's right child is null
+            cout << "MISTAKE RotaRight";
+            return root;
         }
-        // Cast the node to an internal node
-        HuffInternalNode* rootInternal = dynamic_cast<HuffInternalNode*>(nodeRoot);
-        if (!rootInternal->left) {
-            // If the right child is null, rotation is not possible
-            return nodeRoot;
-        }
-        // Perform the rotation
-        HuffInternalNode* newRoot = dynamic_cast<HuffInternalNode*>(rootInternal->left);
-        rootInternal->left = newRoot->right;
-        newRoot->right = rootInternal;
-
+        unique_ptr<HuffNode> newRoot = std::move(root->left);
+        // Reattach the left child of the new root to the right of the original root
+        root->left = std::move(newRoot->right);
+        // Now, make the original root the left child of the new root
+        newRoot->right = std::move(root);
+        // Return the new root
         return newRoot;
     }
 
+    unique_ptr<HuffNode> insertRec(unique_ptr<HuffNode> &node, int n_freq, char n_c) {
+        // Base case of insertion
+        if (!node) return make_unique<HuffNode>(n_freq, n_c);
+        if (n_freq < node->freq) node->left = insertRec(node->left, n_freq, n_c);
+        else node->right = insertRec(node->right, n_freq, n_c);
+        return std::move(node);
+    }
+
+    void preorderTraversal(const unique_ptr<HuffNode>& node, const function<void(char, int, int)>& visit) const
+    {
+        if (!node) return;
+
+        // Call the function on the current node
+
+        int h = node->get_height(node);
+        visit(node->c, node->freq, h);
+
+        // Traverse left subtree
+        preorderTraversal(node->left, visit);
+
+        // Traverse right subtree
+        preorderTraversal(node->right, visit);
+    }
+
+    unique_ptr<HuffNode> get_unbalance_rec(unique_ptr<HuffNode> &node) {
+        // Find in preorder NLR
+        if(!node) return nullptr;
+        int h_left = get_height(node->left);
+        int h_right = get_height(node->right);
+        int gap = abs(h_left - h_right);
+        if (gap > 1 ) {
+            // Unbalance => check unbalance case and rotate
+            cout << "Unbalance at: \n";
+            cout << "Node: " << node->c << " with frequency: " << node->freq  << " and height: " << node->get_height(node) << endl;
+            if (h_left > h_right) { // Left subtree is higher
+                int hsub_left = get_height(node->left->left);
+                int hsub_right = get_height(node->left->right);
+                if (hsub_left > hsub_right) { /** LL CASE*/
+                    node = std::move(rotateRight(std::move(node)));
+                }
+                else { /** LR CASE*/
+                    node->left = std::move(rotateLeft(std::move(root->left)));
+                    node = std::move(rotateRight(std::move(node)));
+                }
+            }
+            else {                  // Right subtree is higher
+                int hsub_left = get_height(node->right->left);
+                int hsub_right = get_height(node->right->right);
+                if (hsub_right > hsub_left) {    /** RR CASE*/
+                    node = std::move(rotateLeft(std::move(node)));
+                }
+                else { /** RL CASE*/
+                    node->right = std::move(rotateRight(std::move(node->right)));
+                    node = std::move(rotateLeft(std::move(node)));
+                }
+            }
+
+        }
+
+        // check Left
+        unique_ptr<HuffNode> leftCheck = get_unbalance_rec(node->left);
+        if (leftCheck) return leftCheck;
+        // check Right
+        unique_ptr<HuffNode> rightCheck = get_unbalance_rec(node->right);
+        if (rightCheck) return rightCheck;
+
+        // Tree is balance
+        return nullptr;
+    }
 public:
     friend class HuffNode;
-    HuffTree(char c, int wt) {
-        root = new HuffLeafNode(c, wt);
-    }
-    HuffTree(HuffInternalNode* node) {
-        root = node;
-    }
-    HuffNode* get_root() { return root; }
-    int get_weight() { return root->get_weight(); }
-    int compareTo(HuffTree* that) {
-        if (root->get_weight() < that->get_weight()) return -1; 
-        else if (root->get_weight() == that->get_weight()) return 0; 
-        else return 1;
-    }
-    int get_height() {
-        return get_height_rec(root);
-    }
-    void insert(HuffTree* tree) {
-        auto *newRoot = new HuffInternalNode(root, tree->root, root->get_weight() + tree->get_root()->get_weight());
-        root = newRoot;
-        // Check rotate 
-        int 
-    }
-    ~HuffTree() {
-        delete_tree(root);
-        root = nullptr;
+    // CONSTRUCTOR
+    HuffTree() : root(nullptr) {}
+
+    HuffTree(char c, int f) : root(std::make_unique<HuffNode>(f, c)) {}
+
+    HuffTree(char c, int f, std::unique_ptr<HuffNode> l, std::unique_ptr<HuffNode> r)
+            : root(std::make_unique<HuffNode>(f, c, std::move(l), std::move(r))) {}
+
+    HuffTree(std::unique_ptr<HuffNode> node) : root(std::move(node)) {}
+
+    int get_freq() {
+        return root->get_freq();
     }
 
-    // Function to recursively delete the tree
-    void delete_tree(HuffNode* node) {
-        if (node != nullptr) {
-            if (!node->isLeaf()) {
-                // If it's an internal node, recursively delete left and right children
-                HuffInternalNode* internalNode = dynamic_cast<HuffInternalNode*>(node);
-                delete_tree(internalNode->left);
-                delete_tree(internalNode->right);
-            }
-            // Delete the current node
-            delete node;
-        }
+    char get_c() {
+        return root->get_c();
     }
+
+    unique_ptr<HuffNode> get_root()  { return std::move(root); }
+
+
+    void set_root(unique_ptr<HuffNode> node) {root = std::move(node);}
+
+    int get_height() { return this->get_height(root); }
+
+    void insert (unique_ptr<HuffNode> node) {
+        root = insertRec(root, node->freq, node->c);
+    }
+    void insert (int n_freq, char n_c) {
+        root = insertRec(root, n_freq, n_c);
+    }
+
+
+    // Public wrapper for traversal starting from root
+    void preorderTraversal(const std::function<void(char, int, int)>& visit) const {
+        preorderTraversal(root, visit);
+    }
+
+    // Find unbalance node NLR
+    unique_ptr<HuffNode> get_unbalance() { return get_unbalance_rec(root); }
+
 };
-
-/** Build hufftree from hufflist */
-HuffTree* buildTree(vector<pair<char, Data>> HHeap) {
-    HuffTree *tmp1 = nullptr, *tmp2 = nullptr, *mp3 = nullptr;
-    while(HHeap.size() > 1) { // While two items left
-        
-    }
+bool cmp (const unique_ptr<HuffTree> &a, const unique_ptr<HuffTree> &b) {
+    if (a->get_freq() > b->get_freq()) return false;
+    else if(a->get_freq() == b->get_freq()) return a->get_c() < b->get_c();
+    else return true;
 }
 
 class RESTAURANT_Gojo {
@@ -224,7 +273,7 @@ void simulate(const string &filename)
 }
 // ==================LAPSE CODE======================
 
-bool cmp (pair<char, Data>& a, pair<char, Data>& b) {
+bool cmp_1 (pair<char, Data>& a, pair<char, Data>& b) {
     if (a.second.freq > b.second.freq) return false;
     else if (a.second.freq == b.second.freq) return a.second.timestamp < b.second.timestamp;
     else return true;
@@ -274,7 +323,7 @@ void LAPSE(const string & name) {
     vector<pair<char, Data>> listX;
     listX.reserve(mp.size());
     for (auto i : mp)  listX.emplace_back(i);
-    sort(listX.begin(), listX.end(), cmp);
+    sort(listX.begin(), listX.end(), cmp_1);
     cout << "AFTER ACCUMULATE AND SORT\n";
     cout << "LIST X IS\n";
     for (auto i : listX) {
